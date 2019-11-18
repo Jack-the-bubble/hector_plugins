@@ -59,13 +59,19 @@ namespace gazebo {
     private:
       void publishOdometry(double step_time);
 
-      tf::Transform getTransformForMotion(double linear_vel_x, double angular_vel, double timeSeconds) const;
+      tf::Transform getTransformForMotion(double linear_vel_x, double linear_vel_y, double angular_vel, double timeSeconds) const;
 
       physics::ModelPtr parent_;
       event::ConnectionPtr update_connection_;
 
       /// \brief A pointer to the Link, where force is applied
       physics::LinkPtr link_;
+
+      /// \brief A pointer to the Link, where force is applied
+      physics::LinkPtr xLink_;
+
+      /// \brief A pointer to the Link, where force is applied
+      physics::LinkPtr yLink_;
 
       /// \brief The Link this plugin is attached to, and will exert forces on.
       private: std::string link_name_;
@@ -85,6 +91,8 @@ namespace gazebo {
       std::string command_topic_;
       std::string odometry_topic_;
       std::string odometry_frame_;
+      std::string x_base_frame_;
+      std::string y_base_frame_;
       std::string robot_base_frame_;
       double odometry_rate_;
       bool publish_odometry_tf_;
@@ -100,6 +108,11 @@ namespace gazebo {
       double x_;
       double y_;
       double rot_;
+
+      double prevX_;
+      double prevY_;
+      double prevRot_;
+
       bool alive_;
       common::Time last_odom_publish_time_;
 #if (GAZEBO_MAJOR_VERSION >= 8)
@@ -111,6 +124,12 @@ namespace gazebo {
       double torque_yaw_velocity_p_gain_;
       double force_x_velocity_p_gain_;
       double force_y_velocity_p_gain_;
+
+      double torque_yaw_velocity_i_gain_;
+      double force_x_velocity_i_gain_;
+      double force_y_velocity_i_gain_;
+
+      double prevError;
 
   };
 

@@ -91,6 +91,8 @@ namespace gazebo
     
     
     torque_yaw_velocity_p_gain_ = 100.0;
+    torque_yaw_velocity_i_gain_ = 999999.9;
+
     force_x_velocity_p_gain_ = 10000.0;
     force_y_velocity_p_gain_ = 10000.0;
     
@@ -102,8 +104,13 @@ namespace gazebo
 
     if (sdf->HasElement("y_velocity_p_gain"))
       (sdf->GetElement("y_velocity_p_gain")->GetValue()->Get(force_y_velocity_p_gain_));
+
+    if (sdf->HasElement("yaw_velocity_i_gain"))
+      (sdf->GetElement("yaw_velocity_i_gain")->GetValue()->Get(torque_yaw_velocity_i_gain_));
+
       
     ROS_INFO_STREAM("ForceBasedMove using gains: yaw: " << torque_yaw_velocity_p_gain_ <<
+                                                "yaw Ti" << torque_yaw_velocity_i_gain_ <<
                                                  " x: " << force_x_velocity_p_gain_ <<
                                                  " y: " << force_y_velocity_p_gain_ << "\n");
 
@@ -121,7 +128,40 @@ namespace gazebo
 
     ROS_INFO_STREAM("robotBaseFrame for force based move plugin: " << robot_base_frame_  << "\n");
 
+
+    x_base_frame_ = "omnitorso_x";
+    if (!sdf->HasElement("xBaseFrame")) 
+    {
+      ROS_WARN("PlanarMovePlugin (ns = %s) missing <xBaseFrame>, "
+          "defaults to \"%s\"",
+          robot_namespace_.c_str(), x_base_frame_.c_str());
+    } 
+    else 
+    {
+      x_base_frame_ = sdf->GetElement("xBaseFrame")->Get<std::string>();
+    }
+
+    ROS_INFO_STREAM("xBaseFrame for force based move plugin: " << x_base_frame_  << "\n");
+
+
+    y_base_frame_ = "omnitorso_y";
+    if (!sdf->HasElement("yBaseFrame")) 
+    {
+      ROS_WARN("PlanarMovePlugin (ns = %s) missing <yBaseFrame>, "
+          "defaults to \"%s\"",
+          robot_namespace_.c_str(), y_base_frame_.c_str());
+    } 
+    else 
+    {
+      y_base_frame_ = sdf->GetElement("yBaseFrame")->Get<std::string>();
+    }
+
+    ROS_INFO_STREAM("yBaseFrame for force based move plugin: " << y_base_frame_  << "\n");
+
+
     this->link_ = parent->GetLink(robot_base_frame_);
+    // this->xLink_ = parent->GetLink(x_base_frame_);
+    // this->yLink_ = parent->GetLink(y_base_frame_);
 
     odometry_rate_ = 20.0;
     if (!sdf->HasElement("odometryRate")) 
@@ -153,6 +193,10 @@ namespace gazebo
     x_ = 0;
     y_ = 0;
     rot_ = 0;
+    prevX_ = 0.0;
+    prevY_ = 0.0;
+    prevRot_ = 0.0;
+
     alive_ = true;
 
     odom_transform_.setIdentity();
@@ -206,16 +250,31 @@ namespace gazebo
     ignition::math::Vector3d angular_vel = parent_->WorldAngularVel();
 
     double error = angular_vel.Z() - rot_;
+    // ROS_INFO(std::string("Rotation error: ").append(std::to_string(error)).c_str());
+
+    // const double regRate = 1 / 500.0;
+    // const double R0 = torque_yaw_velocity_p_gain_*(1 + regRate / (2* torque_yaw_velocity_i_gain_));
+    // const double R1 = torque_yaw_velocity_p_gain_*(regRate / (2*torque_yaw_velocity_i_gain_) - 1);
+
+    // const double yawControl = error*R0 + prevError*R1;
+    // prevError = error;
 
     link_->AddTorque(ignition::math::Vector3d(0.0, 0.0, -error * torque_yaw_velocity_p_gain_));
-
     float yaw = pose.Rot().Yaw();
 
     ignition::math::Vector3d linear_vel = parent_->RelativeLinearVel();
+    const auto velocity = parent_->WorldLinearVel();
+    // ROS_INFO(std::string("X linear: ").append(std::to_string(velocity.X())).c_str());
+    // ROS_INFO(std::string("Y linear: ").append(std::to_string(velocity.Y())).c_str());
 
+    // ROS_INFO(std::string("X error: ").append(std::to_string(x_ - linear_vel.X())).c_str());
+    // ROS_INFO(std::string("Y error: ").append(std::to_string(y_ - linear_vel.Y())).c_str());
+    // xLink_->AddRelativeForce(ignition::math::Vector3d((x_ - linear_vel.X())* force_x_velocity_p_gain_, 0.0, 0.0));
+    // yLink_->AddRelativeForce(ignition::math::Vector3d(0.0, (y_ - linear_vel.Y())* force_y_velocity_p_gain_, 0.0));
     link_->AddRelativeForce(ignition::math::Vector3d((x_ - linear_vel.X())* force_x_velocity_p_gain_,
                                                      (y_ - linear_vel.Y())* force_y_velocity_p_gain_,
                                                      0.0));
+
 #else
     math::Pose pose = parent_->GetWorldPose();
 
@@ -284,7 +343,6 @@ namespace gazebo
 
   void GazeboRosForceBasedMove::publishOdometry(double step_time)
   {
-
     ros::Time current_time = ros::Time::now();
     std::string odom_frame = tf::resolve(tf_prefix_, odometry_frame_);
     std::string base_footprint_frame = 
@@ -294,16 +352,17 @@ namespace gazebo
     ignition::math::Vector3d angular_vel = parent_->RelativeAngularVel();
     ignition::math::Vector3d linear_vel = parent_->RelativeLinearVel();
 
-    odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.X(), angular_vel.Z(), step_time);
+    odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.X(), linear_vel.Y(), angular_vel.Z(), step_time);
 
     tf::poseTFToMsg(odom_transform_, odom_.pose.pose);
     odom_.twist.twist.angular.z = angular_vel.Z();
     odom_.twist.twist.linear.x  = linear_vel.X();
+    odom_.twist.twist.linear.y  = linear_vel.Y();
 #else
     math::Vector3 angular_vel = parent_->GetRelativeAngularVel();
     math::Vector3 linear_vel = parent_->GetRelativeLinearVel();
 
-    odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.x, angular_vel.z, step_time);
+    odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.x, linear_vel.y, angular_vel.z, step_time);
 
     tf::poseTFToMsg(odom_transform_, odom_.pose.pose);
     odom_.twist.twist.angular.z = angular_vel.z;
@@ -315,9 +374,7 @@ namespace gazebo
     odom_.child_frame_id = base_footprint_frame;
 
     if (transform_broadcaster_.get()){
-      transform_broadcaster_->sendTransform(
-          tf::StampedTransform(odom_transform_, current_time, odom_frame,
-              base_footprint_frame));
+      transform_broadcaster_->sendTransform(tf::StampedTransform(odom_transform_, current_time, "odom", "world"));
     }
     
     odom_.pose.covariance[0] = 0.001;
@@ -352,34 +409,33 @@ namespace gazebo
       odom_.twist.covariance[35] = 100.0;
     }
 
-
-
     odometry_pub_.publish(odom_);
   }
 
 
-  tf::Transform GazeboRosForceBasedMove::getTransformForMotion(double linear_vel_x, double angular_vel, double timeSeconds) const
-  {
+  tf::Transform GazeboRosForceBasedMove::getTransformForMotion(double linear_vel_x, double linear_vel_y, double angular_vel, double timeSeconds) const {
+    ROS_INFO(std::string("x_vel: ").append(std::to_string(linear_vel_x)).c_str());
+    ROS_INFO(std::string("y_vel: ").append(std::to_string(linear_vel_y)).c_str());
+    ROS_INFO(std::string("angular_vel: ").append(std::to_string(angular_vel)).c_str());
+
     tf::Transform tmp;
     tmp.setIdentity();
 
-
     if (std::abs(angular_vel) < 0.0001) {
-      //Drive straight
-      tmp.setOrigin(tf::Vector3(static_cast<double>(linear_vel_x*timeSeconds), 0.0, 0.0));
+     tmp.setOrigin(tf::Vector3(static_cast<double>(linear_vel_x*timeSeconds), static_cast<double>(linear_vel_y*timeSeconds), 0.0));
     } else {
-      //Follow circular arc
-      double distChange = linear_vel_x * timeSeconds;
-      double angleChange = angular_vel * timeSeconds;
+      const double angleChange = angular_vel * timeSeconds;
 
-      double arcRadius = distChange / angleChange;
+      const double distChangeX = linear_vel_x * timeSeconds; 
+      const double arcRadiusX = distChangeX / angleChange;
+      const double distChangeY = linear_vel_y * timeSeconds;
+      const double arcRadiusY = distChangeY / angleChange;
 
-      tmp.setOrigin(tf::Vector3(std::sin(angleChange) * arcRadius,
-                                arcRadius - std::cos(angleChange) * arcRadius,
+      tmp.setOrigin(tf::Vector3(std::sin(angleChange) * arcRadiusX + arcRadiusY - std::cos(angleChange) * arcRadiusY,
+                                arcRadiusX - std::cos(angleChange) * arcRadiusX + std::sin(angleChange) * arcRadiusY,
                                 0.0));
       tmp.setRotation(tf::createQuaternionFromYaw(angleChange));
     }
-
     return tmp;
   }
 
