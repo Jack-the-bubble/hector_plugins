@@ -97,6 +97,10 @@ namespace gazebo {
       double odometry_rate_;
       bool publish_odometry_tf_;
 
+      common::PID xPID_;
+      common::PID yPID_;
+      common::PID zPID_;
+
       // Custom Callback Queue
       ros::CallbackQueue queue_;
       boost::thread callback_queue_thread_;
@@ -115,6 +119,7 @@ namespace gazebo {
 
       bool alive_;
       common::Time last_odom_publish_time_;
+      common::Time last_reg_publish_time_;
 #if (GAZEBO_MAJOR_VERSION >= 8)
       ignition::math::Pose3d last_odom_pose_;
 #else
@@ -128,6 +133,10 @@ namespace gazebo {
       double torque_yaw_velocity_i_gain_;
       double force_x_velocity_i_gain_;
       double force_y_velocity_i_gain_;
+
+      double torque_yaw_velocity_d_gain_;
+      double force_x_velocity_d_gain_;
+      double force_y_velocity_d_gain_;
 
       double prevError;
 

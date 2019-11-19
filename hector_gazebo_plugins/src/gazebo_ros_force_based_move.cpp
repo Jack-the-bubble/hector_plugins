@@ -88,31 +88,74 @@ namespace gazebo
     {
       odometry_frame_ = sdf->GetElement("odometryFrame")->Get<std::string>();
     }
-    
-    
-    torque_yaw_velocity_p_gain_ = 100.0;
-    torque_yaw_velocity_i_gain_ = 999999.9;
 
-    force_x_velocity_p_gain_ = 10000.0;
-    force_y_velocity_p_gain_ = 10000.0;
+    // setting PID controllers
     
-    if (sdf->HasElement("yaw_velocity_p_gain"))
-      (sdf->GetElement("yaw_velocity_p_gain")->GetValue()->Get(torque_yaw_velocity_p_gain_));
+    force_x_velocity_p_gain_ = 10000.0;
+    force_x_velocity_i_gain_ = 0.0;
+    force_x_velocity_d_gain_ = 0.0;
+
+    force_y_velocity_p_gain_ = 10000.0;
+    force_y_velocity_i_gain_ = 0.0;
+    force_y_velocity_d_gain_ = 0.0;   
+
+    torque_yaw_velocity_p_gain_ = 100.0;
+    torque_yaw_velocity_i_gain_ = 0.0;
+    torque_yaw_velocity_d_gain_ = 0.0;
 
     if (sdf->HasElement("x_velocity_p_gain"))
       (sdf->GetElement("x_velocity_p_gain")->GetValue()->Get(force_x_velocity_p_gain_));
 
+    if (sdf->HasElement("x_velocity_i_gain"))
+      (sdf->GetElement("x_velocity_i_gain")->GetValue()->Get(force_x_velocity_i_gain_));
+
+    if (sdf->HasElement("x_velocity_d_gain"))
+      (sdf->GetElement("x_velocity_d_gain")->GetValue()->Get(force_x_velocity_d_gain_));
+
     if (sdf->HasElement("y_velocity_p_gain"))
       (sdf->GetElement("y_velocity_p_gain")->GetValue()->Get(force_y_velocity_p_gain_));
+
+    if (sdf->HasElement("y_velocity_i_gain"))
+      (sdf->GetElement("y_velocity_i_gain")->GetValue()->Get(force_y_velocity_i_gain_));
+
+    if (sdf->HasElement("y_velocity_d_gain"))
+      (sdf->GetElement("y_velocity_d_gain")->GetValue()->Get(force_y_velocity_d_gain_));
+
+    if (sdf->HasElement("yaw_velocity_p_gain"))
+      (sdf->GetElement("yaw_velocity_p_gain")->GetValue()->Get(torque_yaw_velocity_p_gain_));
 
     if (sdf->HasElement("yaw_velocity_i_gain"))
       (sdf->GetElement("yaw_velocity_i_gain")->GetValue()->Get(torque_yaw_velocity_i_gain_));
 
+    if (sdf->HasElement("yaw_velocity_d_gain"))
+      (sdf->GetElement("yaw_velocity_d_gain")->GetValue()->Get(torque_yaw_velocity_d_gain_));
+
       
-    ROS_INFO_STREAM("ForceBasedMove using gains: yaw: " << torque_yaw_velocity_p_gain_ <<
-                                                "yaw Ti" << torque_yaw_velocity_i_gain_ <<
-                                                 " x: " << force_x_velocity_p_gain_ <<
-                                                 " y: " << force_y_velocity_p_gain_ << "\n");
+    ROS_INFO_STREAM("ForceBasedMove x axis using: P: " << force_x_velocity_p_gain_ <<
+                                               ", I: " << force_x_velocity_i_gain_ <<
+                                               ", D: " << force_x_velocity_d_gain_);
+
+    ROS_INFO_STREAM("ForceBasedMove y axis using: P: " << force_y_velocity_p_gain_ <<
+                                               ", I: " << force_y_velocity_i_gain_ <<
+                                               ", D: " << force_y_velocity_d_gain_);
+
+    ROS_INFO_STREAM("ForceBasedMove z axis using: P: " << torque_yaw_velocity_p_gain_ <<
+                                               ", I: " << torque_yaw_velocity_i_gain_ <<
+                                               ", D: " << torque_yaw_velocity_d_gain_);
+
+    double integralLimit = 1000.0;
+    double commandLimit = 1200.0;
+
+    if (sdf->HasElement("integralLimit"))
+      (sdf->GetElement("integralLimit")->GetValue()->Get(integralLimit));
+
+    if (sdf->HasElement("commandLimit"))
+      (sdf->GetElement("commandLimit")->GetValue()->Get(commandLimit));
+
+    xPID_.Init(force_x_velocity_p_gain_, force_x_velocity_i_gain_, force_x_velocity_d_gain_, integralLimit, -integralLimit, commandLimit, -commandLimit);
+    yPID_.Init(force_y_velocity_p_gain_, force_y_velocity_i_gain_, force_y_velocity_d_gain_, integralLimit, -integralLimit, commandLimit, -commandLimit);
+    zPID_.Init(torque_yaw_velocity_p_gain_, torque_yaw_velocity_i_gain_, torque_yaw_velocity_d_gain_, integralLimit, -integralLimit, commandLimit, -commandLimit);
+
 
     robot_base_frame_ = "base_footprint";
     if (!sdf->HasElement("robotBaseFrame")) 
@@ -242,28 +285,42 @@ namespace gazebo
 
   // Update the controller
   void GazeboRosForceBasedMove::UpdateChild()
-  {
+  {       
     boost::mutex::scoped_lock scoped_lock(lock);
-#if (GAZEBO_MAJOR_VERSION >= 8)
+  #if (GAZEBO_MAJOR_VERSION >= 8)
+    common::Time current_reg_time = parent_->GetWorld()->SimTime();
+  #else
+    common::Time current_reg_time = parent_->GetWorld()->GetSimTime();
+  #endif
+    common::Time seconds_since_last_reg_update = current_reg_time - last_reg_publish_time_;
+
+  #if (GAZEBO_MAJOR_VERSION >= 8)
     ignition::math::Pose3d pose = parent_->WorldPose();
 
     ignition::math::Vector3d angular_vel = parent_->WorldAngularVel();
 
-    double error = angular_vel.Z() - rot_;
+    
+    // zPID_.SetCmd(rot_);
     // ROS_INFO(std::string("Rotation error: ").append(std::to_string(error)).c_str());
-
-    // const double regRate = 1 / 500.0;
-    // const double R0 = torque_yaw_velocity_p_gain_*(1 + regRate / (2* torque_yaw_velocity_i_gain_));
-    // const double R1 = torque_yaw_velocity_p_gain_*(regRate / (2*torque_yaw_velocity_i_gain_) - 1);
-
-    // const double yawControl = error*R0 + prevError*R1;
     // prevError = error;
 
-    link_->AddTorque(ignition::math::Vector3d(0.0, 0.0, -error * torque_yaw_velocity_p_gain_));
+    // link_->AddTorque(ignition::math::Vector3d(0.0, 0.0, -error * torque_yaw_velocity_p_gain_));
+    double error = angular_vel.Z() - rot_;
+    const double rotControl = zPID_.Update(error, seconds_since_last_reg_update);
+
+    link_->AddTorque(ignition::math::Vector3d(0.0, 0.0, std::isnan(rotControl) ? 0.0 : rotControl));
     float yaw = pose.Rot().Yaw();
 
     ignition::math::Vector3d linear_vel = parent_->RelativeLinearVel();
     const auto velocity = parent_->WorldLinearVel();
+
+    // xPID_.SetCmd(linear_vel.X());
+    // yPID_.SetCmd(linear_vel.Y());
+
+    const double xControl = xPID_.Update(linear_vel.X() - x_, seconds_since_last_reg_update);
+    const double yControl = yPID_.Update(linear_vel.Y() - y_, seconds_since_last_reg_update);
+    link_->AddRelativeForce(ignition::math::Vector3d(std::isnan(xControl) ? 0.0 : xControl, std::isnan(yControl) ? 0.0 : yControl, 0.0));
+    ROS_INFO_STREAM("x: " << xControl << ", y: " << yControl << ", z: " << rotControl);
     // ROS_INFO(std::string("X linear: ").append(std::to_string(velocity.X())).c_str());
     // ROS_INFO(std::string("Y linear: ").append(std::to_string(velocity.Y())).c_str());
 
@@ -271,9 +328,9 @@ namespace gazebo
     // ROS_INFO(std::string("Y error: ").append(std::to_string(y_ - linear_vel.Y())).c_str());
     // xLink_->AddRelativeForce(ignition::math::Vector3d((x_ - linear_vel.X())* force_x_velocity_p_gain_, 0.0, 0.0));
     // yLink_->AddRelativeForce(ignition::math::Vector3d(0.0, (y_ - linear_vel.Y())* force_y_velocity_p_gain_, 0.0));
-    link_->AddRelativeForce(ignition::math::Vector3d((x_ - linear_vel.X())* force_x_velocity_p_gain_,
-                                                     (y_ - linear_vel.Y())* force_y_velocity_p_gain_,
-                                                     0.0));
+    // link_->AddRelativeForce(ignition::math::Vector3d((x_ - linear_vel.X())* force_x_velocity_p_gain_,
+    //                                                  (y_ - linear_vel.Y())* force_y_velocity_p_gain_,
+    //                                                  0.0));
 
 #else
     math::Pose pose = parent_->GetWorldPose();
@@ -414,9 +471,9 @@ namespace gazebo
 
 
   tf::Transform GazeboRosForceBasedMove::getTransformForMotion(double linear_vel_x, double linear_vel_y, double angular_vel, double timeSeconds) const {
-    ROS_INFO(std::string("x_vel: ").append(std::to_string(linear_vel_x)).c_str());
-    ROS_INFO(std::string("y_vel: ").append(std::to_string(linear_vel_y)).c_str());
-    ROS_INFO(std::string("angular_vel: ").append(std::to_string(angular_vel)).c_str());
+    // ROS_INFO(std::string("x_vel: ").append(std::to_string(linear_vel_x)).c_str());
+    // ROS_INFO(std::string("y_vel: ").append(std::to_string(linear_vel_y)).c_str());
+    // ROS_INFO(std::string("angular_vel: ").append(std::to_string(angular_vel)).c_str());
 
     tf::Transform tmp;
     tmp.setIdentity();
