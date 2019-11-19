@@ -154,8 +154,7 @@ namespace gazebo
 
     xPID_.Init(force_x_velocity_p_gain_, force_x_velocity_i_gain_, force_x_velocity_d_gain_, integralLimit, -integralLimit, commandLimit, -commandLimit);
     yPID_.Init(force_y_velocity_p_gain_, force_y_velocity_i_gain_, force_y_velocity_d_gain_, integralLimit, -integralLimit, commandLimit, -commandLimit);
-    zPID_.Init(torque_yaw_velocity_p_gain_, torque_yaw_velocity_i_gain_, torque_yaw_velocity_d_gain_, integralLimit, -integralLimit, commandLimit, -commandLimit);
-
+    zPID_.Init(torque_yaw_velocity_p_gain_, torque_yaw_velocity_i_gain_, torque_yaw_velocity_d_gain_, integralLimit, -integralLimit, 10*commandLimit, -10*commandLimit);
 
     robot_base_frame_ = "base_footprint";
     if (!sdf->HasElement("robotBaseFrame")) 
@@ -320,7 +319,7 @@ namespace gazebo
     const double xControl = xPID_.Update(linear_vel.X() - x_, seconds_since_last_reg_update);
     const double yControl = yPID_.Update(linear_vel.Y() - y_, seconds_since_last_reg_update);
     link_->AddRelativeForce(ignition::math::Vector3d(std::isnan(xControl) ? 0.0 : xControl, std::isnan(yControl) ? 0.0 : yControl, 0.0));
-    ROS_INFO_STREAM("x: " << xControl << ", y: " << yControl << ", z: " << rotControl);
+    // ROS_INFO_STREAM("x: " << xControl << ", y: " << yControl << ", z: " << rotControl);
     // ROS_INFO(std::string("X linear: ").append(std::to_string(velocity.X())).c_str());
     // ROS_INFO(std::string("Y linear: ").append(std::to_string(velocity.Y())).c_str());
 
