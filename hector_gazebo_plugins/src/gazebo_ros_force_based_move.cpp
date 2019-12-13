@@ -152,9 +152,9 @@ namespace gazebo
     if (sdf->HasElement("commandLimit"))
       (sdf->GetElement("commandLimit")->GetValue()->Get(commandLimit));
 
-    xPID_.Init(force_x_velocity_p_gain_, force_x_velocity_i_gain_, force_x_velocity_d_gain_, integralLimit, -integralLimit, commandLimit, -commandLimit);
-    yPID_.Init(force_y_velocity_p_gain_, force_y_velocity_i_gain_, force_y_velocity_d_gain_, integralLimit, -integralLimit, commandLimit, -commandLimit);
-    zPID_.Init(torque_yaw_velocity_p_gain_, torque_yaw_velocity_i_gain_, torque_yaw_velocity_d_gain_, integralLimit, -integralLimit, 10*commandLimit, -10*commandLimit);
+    xPID_.Init(force_x_velocity_p_gain_, force_x_velocity_i_gain_, force_x_velocity_d_gain_, 5*integralLimit, -5*integralLimit, 1.5*commandLimit, -1.5*commandLimit);
+    yPID_.Init(force_y_velocity_p_gain_, force_y_velocity_i_gain_, force_y_velocity_d_gain_, 5*integralLimit, -5*integralLimit, 1.5*commandLimit, -1.5*commandLimit);
+    zPID_.Init(torque_yaw_velocity_p_gain_, torque_yaw_velocity_i_gain_, torque_yaw_velocity_d_gain_, 5*integralLimit, -5*integralLimit, 3*commandLimit, -3*commandLimit);
 
     robot_base_frame_ = "base_footprint";
     if (!sdf->HasElement("robotBaseFrame")) 
@@ -224,6 +224,14 @@ namespace gazebo
     } else {
       this->publish_odometry_tf_ = sdf->GetElement("publishOdometryTf")->Get<bool>();
     }
+
+    this->useRealOdom = true;
+    if (!sdf->HasElement("useRealOdom")) {
+      ROS_WARN("No useRealOdom, setting value to default", this->useRealOdom ? "true" : "false");
+    } else {
+      this->useRealOdom = sdf->GetElement("useRealOdom")->Get<bool>();
+    }
+
  
 #if (GAZEBO_MAJOR_VERSION >= 8)
     last_odom_publish_time_ = parent_->GetWorld()->SimTime();
@@ -397,74 +405,185 @@ namespace gazebo
     }
   }
 
+//     void GazeboRosForceBasedMove::publishOdometry(double step_time)
+//   {
+//     ros::Time current_time = ros::Time::now();
+//     std::string odom_frame = tf::resolve(tf_prefix_, odometry_frame_);
+//     std::string base_footprint_frame = tf::resolve(tf_prefix_, robot_base_frame_);
+//     odom_.header.stamp = current_time;
+//     odom_.header.frame_id = odom_frame;
+//     odom_.child_frame_id = base_footprint_frame;
+//     if (transform_broadcaster_.get()){
+//       transform_broadcaster_->sendTransform(tf::StampedTransform(odom_transform_, current_time, "odom", "world"));
+//     }
+      
+//      odom_.pose.covariance[0] = 0.001;
+//      odom_.pose.covariance[7] = 0.001;
+//      odom_.pose.covariance[14] = 1000000000000.0;
+//      odom_.pose.covariance[21] = 1000000000000.0;
+//      odom_.pose.covariance[28] = 1000000000000.0;
+      
+// #if (GAZEBO_MAJOR_VERSION >= 8)
+//     if (std::abs(angular_vel.Z()) < 0.0001) {
+// #else
+//     if (std::abs(angular_vel.z) < 0.0001) {
+// #endif
+//       odom_.pose.covariance[35] = 0.01;
+//     } else {
+//       odom_.pose.covariance[35] = 100.0;
+//     }
+
+//     odom_.twist.covariance[0] = 0.001;
+//     odom_.twist.covariance[7] = 0.001;
+//     odom_.twist.covariance[14] = 0.001;
+//     odom_.twist.covariance[21] = 1000000000000.0;
+//     odom_.twist.covariance[28] = 1000000000000.0;
+
+// #if (GAZEBO_MAJOR_VERSION >= 8)
+//     if (std::abs(angular_vel.Z()) < 0.0001) {
+// #else
+//     if (std::abs(angular_vel.z) < 0.0001) {
+// #endif
+//       odom_.twist.covariance[35] = 0.01;
+//     } else {
+//       odom_.twist.covariance[35] = 100.0;
+//     }
+
+//     if(this->useRealOdom){
+//   #if (GAZEBO_MAJOR_VERSION >= 8)
+//       ignition::math::Vector3d angular_vel = parent_->RelativeAngularVel();
+//       ignition::math::Vector3d linear_vel = parent_->RelativeLinearVel();
+
+//       odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.X(), linear_vel.Y(), angular_vel.Z(), step_time);
+
+//       tf::poseTFToMsg(odom_transform_, odom_.pose.pose);
+//       odom_.twist.twist.angular.z = angular_vel.Z();
+//       odom_.twist.twist.linear.x  = linear_vel.X();
+//       odom_.twist.twist.linear.y  = linear_vel.Y();
+//   #else
+//       math::Vector3 angular_vel = parent_->GetRelativeAngularVel();
+//       math::Vector3 linear_vel = parent_->GetRelativeLinearVel();
+
+//       odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.x, linear_vel.y, angular_vel.z, step_time);
+
+//       tf::poseTFToMsg(odom_transform_, odom_.pose.pose);
+//       odom_.twist.twist.angular.z = angular_vel.z;
+//       odom_.twist.twist.linear.x  = linear_vel.x;
+//   #endif
+//     } else {
+//       const auto pose = this->parent_->WorldPose();
+//       const auto linVel = this->parent_->WorldLinearVel();
+//       const auto angVel = this->parent_->WorldAngularVel();
+//       odom_.pose.pose. = pose.pose;
+//       odom_.twist.twist.linear.x = linVel.X();
+//       odom_.twist.twist.linear.y = linVel.Y();
+//       odom_.twist.twist.linear.z = linVel.Z();
+//       odom_.twist.twist.angular.x = angVel.X();
+//       odom_.twist.twist.angular.y = angVel.Y();
+//       odom_.twist.twist.angular.z = angVel.Z();
+//     }
+//     odometry_pub_.publish(odom_);
+//   }
+
+
+
+
   void GazeboRosForceBasedMove::publishOdometry(double step_time)
   {
     ros::Time current_time = ros::Time::now();
     std::string odom_frame = tf::resolve(tf_prefix_, odometry_frame_);
-    std::string base_footprint_frame = 
-      tf::resolve(tf_prefix_, robot_base_frame_);
+    std::string base_footprint_frame = tf::resolve(tf_prefix_, robot_base_frame_);
 
-#if (GAZEBO_MAJOR_VERSION >= 8)
-    ignition::math::Vector3d angular_vel = parent_->RelativeAngularVel();
-    ignition::math::Vector3d linear_vel = parent_->RelativeLinearVel();
+    if(this->useRealOdom){
 
-    odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.X(), linear_vel.Y(), angular_vel.Z(), step_time);
+      #if (GAZEBO_MAJOR_VERSION >= 8)
+        ignition::math::Vector3d angular_vel = parent_->RelativeAngularVel();
+        ignition::math::Vector3d linear_vel = parent_->RelativeLinearVel();
 
-    tf::poseTFToMsg(odom_transform_, odom_.pose.pose);
-    odom_.twist.twist.angular.z = angular_vel.Z();
-    odom_.twist.twist.linear.x  = linear_vel.X();
-    odom_.twist.twist.linear.y  = linear_vel.Y();
-#else
-    math::Vector3 angular_vel = parent_->GetRelativeAngularVel();
-    math::Vector3 linear_vel = parent_->GetRelativeLinearVel();
+        odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.X(), linear_vel.Y(), angular_vel.Z(), step_time);
 
-    odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.x, linear_vel.y, angular_vel.z, step_time);
+        tf::poseTFToMsg(odom_transform_, odom_.pose.pose);
+        odom_.twist.twist.angular.z = angular_vel.Z();
+        odom_.twist.twist.linear.x  = linear_vel.X();
+        odom_.twist.twist.linear.y  = linear_vel.Y();
+      #else
+        math::Vector3 angular_vel = parent_->GetRelativeAngularVel();
+        math::Vector3 linear_vel = parent_->GetRelativeLinearVel();
 
-    tf::poseTFToMsg(odom_transform_, odom_.pose.pose);
-    odom_.twist.twist.angular.z = angular_vel.z;
-    odom_.twist.twist.linear.x  = linear_vel.x;
-#endif
+        odom_transform_= odom_transform_ * this->getTransformForMotion(linear_vel.x, linear_vel.y, angular_vel.z, step_time);
+
+        tf::poseTFToMsg(odom_transform_, odom_.pose.pose);
+        odom_.twist.twist.angular.z = angular_vel.z;
+        odom_.twist.twist.linear.x  = linear_vel.x;
+      #endif
+
+        if (transform_broadcaster_.get()){
+          transform_broadcaster_->sendTransform(tf::StampedTransform(odom_transform_, current_time, "odom", "world"));
+        }
+        
+        odom_.pose.covariance[0] = 0.001;
+        odom_.pose.covariance[7] = 0.001;
+        odom_.pose.covariance[14] = 1000000000000.0;
+        odom_.pose.covariance[21] = 1000000000000.0;
+        odom_.pose.covariance[28] = 1000000000000.0;
+         
+      #if (GAZEBO_MAJOR_VERSION >= 8)
+        if (std::abs(angular_vel.Z()) < 0.0001) {
+      #else
+        if (std::abs(angular_vel.z) < 0.0001) {
+      #endif
+          odom_.pose.covariance[35] = 0.01;
+        }else{
+          odom_.pose.covariance[35] = 100.0;
+        }
+
+        odom_.twist.covariance[0] = 0.001;
+        odom_.twist.covariance[7] = 0.001;
+        odom_.twist.covariance[14] = 0.001;
+        odom_.twist.covariance[21] = 1000000000000.0;
+        odom_.twist.covariance[28] = 1000000000000.0;
+
+      #if (GAZEBO_MAJOR_VERSION >= 8)
+        if (std::abs(angular_vel.Z()) < 0.0001) {
+      #else
+        if (std::abs(angular_vel.z) < 0.0001) {
+      #endif
+          odom_.twist.covariance[35] = 0.01;
+        } else {
+          odom_.twist.covariance[35] = 100.0;
+        }
+    } else {
+      const auto pose = this->parent_->WorldPose();
+      const auto linVel = this->parent_->WorldLinearVel();
+      const auto angVel = this->parent_->WorldAngularVel();
+      odom_.pose.pose.position.x = pose.Pos().X();
+      odom_.pose.pose.position.y = pose.Pos().Y();
+      odom_.pose.pose.position.z = pose.Pos().Z();
+      odom_.pose.pose.orientation.x = pose.Rot().X();
+      odom_.pose.pose.orientation.y = pose.Rot().Y();
+      odom_.pose.pose.orientation.z = pose.Rot().Z();
+      odom_.pose.pose.orientation.w = pose.Rot().W();
+
+      odom_.twist.twist.linear.x = linVel.X();
+      odom_.twist.twist.linear.y = linVel.Y();
+      odom_.twist.twist.linear.z = linVel.Z();
+      odom_.twist.twist.angular.x = angVel.X();
+      odom_.twist.twist.angular.y = angVel.Y();
+      odom_.twist.twist.angular.z = angVel.Z();
+
+      tf::Transform tmp;
+      tmp.setIdentity();
+      tmp.setOrigin(tf::Vector3(odom_.pose.pose.position.x, odom_.pose.pose.position.y, odom_.pose.pose.position.z));
+      tmp.setRotation(tf::Quaternion(pose.Rot().X(), pose.Rot().Y(), pose.Rot().Z(), pose.Rot().W()));
+
+      if (transform_broadcaster_.get()){
+          transform_broadcaster_->sendTransform(tf::StampedTransform(tmp, current_time, "odom", "world"));
+      }
+    }
 
     odom_.header.stamp = current_time;
     odom_.header.frame_id = odom_frame;
     odom_.child_frame_id = base_footprint_frame;
-
-    if (transform_broadcaster_.get()){
-      transform_broadcaster_->sendTransform(tf::StampedTransform(odom_transform_, current_time, "odom", "world"));
-    }
-    
-    odom_.pose.covariance[0] = 0.001;
-    odom_.pose.covariance[7] = 0.001;
-    odom_.pose.covariance[14] = 1000000000000.0;
-    odom_.pose.covariance[21] = 1000000000000.0;
-    odom_.pose.covariance[28] = 1000000000000.0;
-    
-#if (GAZEBO_MAJOR_VERSION >= 8)
-    if (std::abs(angular_vel.Z()) < 0.0001) {
-#else
-    if (std::abs(angular_vel.z) < 0.0001) {
-#endif
-      odom_.pose.covariance[35] = 0.01;
-    }else{
-      odom_.pose.covariance[35] = 100.0;
-    }
-
-    odom_.twist.covariance[0] = 0.001;
-    odom_.twist.covariance[7] = 0.001;
-    odom_.twist.covariance[14] = 0.001;
-    odom_.twist.covariance[21] = 1000000000000.0;
-    odom_.twist.covariance[28] = 1000000000000.0;
-
-#if (GAZEBO_MAJOR_VERSION >= 8)
-    if (std::abs(angular_vel.Z()) < 0.0001) {
-#else
-    if (std::abs(angular_vel.z) < 0.0001) {
-#endif
-      odom_.twist.covariance[35] = 0.01;
-    }else{
-      odom_.twist.covariance[35] = 100.0;
-    }
-
     odometry_pub_.publish(odom_);
   }
 

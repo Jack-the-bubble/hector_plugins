@@ -140,6 +140,8 @@ namespace gazebo {
 
       double prevError;
 
+      bool useRealOdom;
+
   };
 
 }
