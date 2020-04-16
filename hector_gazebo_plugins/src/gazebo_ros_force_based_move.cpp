@@ -518,7 +518,8 @@ namespace gazebo
       #endif
 
         if (transform_broadcaster_.get()){
-          transform_broadcaster_->sendTransform(tf::StampedTransform(odom_transform_, current_time, "odom", "world"));
+//          transform_broadcaster_->sendTransform(tf::StampedTransform(odom_transform_, current_time, "odom", "world"));
+            transform_broadcaster_->sendTransform(tf::StampedTransform(odom_transform_, current_time, "odom", robot_base_frame_));
         }
         
         odom_.pose.covariance[0] = 0.001;
@@ -577,7 +578,8 @@ namespace gazebo
       tmp.setRotation(tf::Quaternion(pose.Rot().X(), pose.Rot().Y(), pose.Rot().Z(), pose.Rot().W()));
 
       if (transform_broadcaster_.get()){
-          transform_broadcaster_->sendTransform(tf::StampedTransform(tmp, current_time, "odom", "world"));
+//          transform_broadcaster_->sendTransform(tf::StampedTransform(tmp, current_time, "odom", "world"));
+            transform_broadcaster_->sendTransform(tf::StampedTransform(tmp, current_time, "odom", robot_base_frame_));
       }
     }
 
